@@ -1,0 +1,988 @@
+# AI Loom Architecture Specification
+
+# Chapter 7 — Context Engine & Code Intelligence
+
+**Version:** 1.0 Draft
+
+---
+
+# 7.1 Purpose
+
+The Context Engine is arguably the most important subsystem in AI Loom.
+
+**The quality of the context determines the quality of the code.**
+
+Most coding agents fail because they retrieve too much code instead of the right code.
+
+The Context Engine's job is to answer one question:
+
+> **"Given this task, what is the minimum information required for the worker to solve it correctly?"**
+
+---
+
+# 7.2 Philosophy
+
+The Context Engine follows one rule:
+
+> **Never retrieve code. Retrieve knowledge.**
+
+Knowledge can be:
+
+* Symbols
+* Dependencies
+* File summaries
+* Recent changes
+* Call chains
+* Relevant documentation
+* Coding conventions
+
+Actual source code is retrieved only when necessary.
+
+---
+
+# 7.3 Responsibilities
+
+The Context Engine is responsible for:
+
+* Project understanding
+* Symbol lookup
+* Dependency traversal
+* File ranking
+* Context budgeting
+* Prompt assembly
+* Context compression
+* Incremental updates
+* Relevance scoring
+
+It is **not** responsible for:
+
+* Planning
+* Executing tools
+* Calling models
+* Editing files
+
+---
+
+# 7.4 High-Level Architecture
+
+```text
+               Worker Task
+                    │
+                    ▼
+           Context Engine
+                    │
+ ┌──────────┬──────────────┬──────────────┐
+ ▼          ▼              ▼              ▼
+Index   Symbol Graph   Git Changes   Memory
+ │
+ ▼
+Ranking Engine
+ │
+ ▼
+Budget Manager
+ │
+ ▼
+Prompt Builder
+ │
+ ▼
+Context Package
+```
+
+---
+
+# 7.5 Inputs
+
+The Context Engine receives:
+
+```text
+Task
+
+Workspace
+
+Project Index
+
+Conversation Summary
+
+Planner Metadata
+
+Configuration
+```
+
+---
+
+# 7.6 Output
+
+Produces a single immutable object.
+
+```text
+ContextPackage
+
+Objective
+
+Relevant Files
+
+Relevant Symbols
+
+File Summaries
+
+Recent Changes
+
+Project Summary
+
+Coding Standards
+
+Tool Manifest
+
+Constraints
+```
+
+Workers never receive anything else.
+
+---
+
+# 7.7 Retrieval Pipeline
+
+Every request follows the same pipeline.
+
+```text
+Task
+
+↓
+
+Intent Analysis
+
+↓
+
+Symbol Discovery
+
+↓
+
+Dependency Expansion
+
+↓
+
+File Ranking
+
+↓
+
+Budget Allocation
+
+↓
+
+Code Retrieval
+
+↓
+
+Compression
+
+↓
+
+Prompt Assembly
+```
+
+Each stage has one responsibility.
+
+---
+
+# 7.8 Intent Analysis
+
+The task is classified before retrieval.
+
+Example:
+
+```text
+Rename function
+```
+
+Needs:
+
+* symbol definition
+* call sites
+
+Not:
+
+* project summary
+* architecture docs
+
+---
+
+Example:
+
+```text
+Add OAuth
+```
+
+Needs:
+
+* auth module
+* routing
+* middleware
+* configuration
+* database
+* frontend login
+
+Different intents require different retrieval strategies.
+
+---
+
+# 7.9 Symbol Discovery
+
+First query:
+
+> Which symbols are involved?
+
+Uses SQLite.
+
+Example:
+
+```text
+login()
+
+↓
+
+File
+
+↓
+
+References
+
+↓
+
+Callers
+
+↓
+
+Callees
+```
+
+No LLM required.
+
+---
+
+# 7.10 Dependency Expansion
+
+After symbols are found:
+
+Expand one hop at a time.
+
+```text
+login()
+
+↓
+
+validate_user()
+
+↓
+
+database.py
+```
+
+Do NOT recursively load the entire graph.
+
+Maximum expansion depth is configurable.
+
+Default:
+
+```text
+Depth = 2
+```
+
+---
+
+# 7.11 File Ranking
+
+Every candidate file receives a relevance score.
+
+Factors:
+
+| Signal              | Weight |
+| ------------------- | -----: |
+| Symbol definition   |    100 |
+| Direct reference    |     90 |
+| Direct import       |     80 |
+| Recent modification |     70 |
+| Same directory      |     40 |
+| Semantic similarity |     30 |
+| Same language       |     10 |
+
+Scores are additive.
+
+Only highest-ranked files survive.
+
+---
+
+# 7.12 Code Retrieval Levels
+
+Files are retrieved progressively.
+
+### Level 0
+
+Summary only
+
+```text
+auth.py
+
+Handles authentication.
+
+Contains JWT generation.
+```
+
+---
+
+### Level 1
+
+Symbol body only
+
+```python
+def login():
+```
+
+Only the requested function.
+
+---
+
+### Level 2
+
+Neighbourhood
+
+```python
+20 lines before
+
+↓
+
+Target
+
+↓
+
+20 lines after
+```
+
+---
+
+### Level 3
+
+Entire file
+
+Used only if necessary.
+
+---
+
+### Level 4
+
+Multiple files
+
+Only for architectural tasks.
+
+---
+
+# 7.13 Progressive Retrieval
+
+The worker should never begin with maximum context.
+
+Instead:
+
+```text
+Summary
+
+↓
+
+Need more?
+
+↓
+
+Function
+
+↓
+
+Need more?
+
+↓
+
+File
+
+↓
+
+Need more?
+
+↓
+
+Neighbour Files
+```
+
+This dramatically reduces prompt size.
+
+---
+
+# 7.14 Project Summary
+
+Generated during indexing.
+
+Example:
+
+```text
+Backend
+
+FastAPI
+
+Authentication
+
+JWT
+
+ORM
+
+SQLAlchemy
+
+Frontend
+
+React
+
+State
+
+Redux
+
+Tests
+
+Pytest
+```
+
+Included in almost every task.
+
+---
+
+# 7.15 File Summary
+
+Every indexed file contains:
+
+```text
+Purpose
+
+Responsibilities
+
+Exports
+
+Dependencies
+
+Public API
+
+Important Notes
+```
+
+Generated by an LLM once.
+
+Updated only when file changes.
+
+---
+
+# 7.16 Symbol Summary
+
+Large functions receive summaries.
+
+Example:
+
+```text
+validate_user()
+
+Checks credentials.
+
+Queries database.
+
+Returns user.
+
+Raises InvalidCredentials.
+```
+
+Useful when full function doesn't fit.
+
+---
+
+# 7.17 Recent Changes
+
+Git strongly influences relevance.
+
+Recent modifications receive priority.
+
+Example:
+
+```text
+Modified:
+
+auth.py
+
+session.py
+
+login.tsx
+```
+
+Likely related to current work.
+
+---
+
+# 7.18 Coding Standards
+
+Extracted automatically.
+
+Example:
+
+```text
+Formatter
+
+Black
+
+Typing
+
+Strict
+
+Imports
+
+Absolute
+
+Tests
+
+Pytest
+
+Logging
+
+Structlog
+```
+
+Worker follows these conventions automatically.
+
+---
+
+# 7.19 Context Budget Manager
+
+Every model has a token budget.
+
+Example:
+
+```text
+Model
+
+9B
+
+↓
+
+Context
+
+32k
+
+↓
+
+Reserve
+
+6k
+
+↓
+
+Available
+
+26k
+```
+
+Reserved space is for:
+
+* reasoning
+* tool calls
+* responses
+
+Never fill the entire window.
+
+---
+
+# 7.20 Budget Allocation
+
+Suggested allocation:
+
+| Section          | Percentage |
+| ---------------- | ---------: |
+| Objective        |         5% |
+| Project Summary  |         5% |
+| Relevant Files   |        55% |
+| Symbol Summaries |        15% |
+| Recent Changes   |        10% |
+| Coding Standards |         5% |
+| Tool Manifest    |         5% |
+
+Configurable.
+
+---
+
+# 7.21 Context Compression
+
+If budget exceeded:
+
+Compression order:
+
+```text
+Whole File
+
+↓
+
+Relevant Regions
+
+↓
+
+Functions
+
+↓
+
+Summaries
+
+↓
+
+Project Summary Only
+```
+
+Never truncate randomly.
+
+---
+
+# 7.22 Smart Expansion
+
+If worker requests more information:
+
+```text
+Need function body
+
+↓
+
+Retrieve
+
+↓
+
+Resume
+```
+
+Instead of restarting with larger prompts.
+
+---
+
+# 7.23 Dynamic Retrieval
+
+Worker can issue requests.
+
+Example:
+
+```text
+Need implementation of:
+
+validate_token()
+```
+
+Context Engine retrieves it.
+
+Worker resumes.
+
+No new conversation.
+
+---
+
+# 7.24 Cross-Language Mapping
+
+Example:
+
+```text
+Frontend
+
+↓
+
+REST Route
+
+↓
+
+Backend
+
+↓
+
+Database
+```
+
+The Context Engine maintains these relationships.
+
+Useful for full-stack tasks.
+
+---
+
+# 7.25 Embeddings
+
+Embeddings are the **last resort**, not the primary index.
+
+Used only when:
+
+* User asks conceptual questions.
+* Exact symbols don't exist.
+* Similar implementations are needed.
+
+Never replace AST indexing.
+
+---
+
+# 7.26 Conversation Compression
+
+Conversation is summarised separately.
+
+Worker receives:
+
+```text
+Current Objective
+
+Previous Decisions
+
+Constraints
+
+Completed Work
+```
+
+Not every message.
+
+---
+
+# 7.27 Caching
+
+Every retrieval step is cached.
+
+Cache keys include:
+
+```text
+Task ID
+
+Workspace Hash
+
+Index Version
+
+Git Commit
+
+Context Budget
+```
+
+Changing any invalidates the cache.
+
+---
+
+# 7.28 Incremental Updates
+
+After file edits:
+
+```text
+Changed File
+
+↓
+
+Reparse AST
+
+↓
+
+Update Symbols
+
+↓
+
+Update References
+
+↓
+
+Update Summary
+
+↓
+
+Invalidate Cache
+```
+
+Entire repository is never re-indexed.
+
+---
+
+# 7.29 Retrieval Metrics
+
+Record:
+
+* Retrieval time
+* Files retrieved
+* Symbols retrieved
+* Tokens before compression
+* Tokens after compression
+* Cache hits
+* Cache misses
+
+Useful for optimisation.
+
+---
+
+# 7.30 Failure Handling
+
+If retrieval fails:
+
+Fallback order:
+
+```text
+AST
+
+↓
+
+Text Search
+
+↓
+
+Embeddings
+
+↓
+
+Planner Assistance
+
+↓
+
+User Clarification
+```
+
+The system should degrade gracefully.
+
+---
+
+# 7.31 Context Package Layout
+
+Every worker receives context in the same order.
+
+```text
+System Instructions
+
+↓
+
+Objective
+
+↓
+
+Constraints
+
+↓
+
+Project Summary
+
+↓
+
+Relevant File Summaries
+
+↓
+
+Relevant Source Code
+
+↓
+
+Recent Changes
+
+↓
+
+Coding Standards
+
+↓
+
+Tool Manifest
+```
+
+Consistent ordering improves model performance.
+
+---
+
+# 7.32 Design Constraints
+
+1. Never exceed the configured context budget.
+2. Never retrieve entire repositories.
+3. Prefer summaries over source code.
+4. Prefer symbol-level retrieval over file-level retrieval.
+5. Prefer deterministic retrieval over semantic retrieval.
+6. Use embeddings only when structural retrieval fails.
+7. Every retrieval decision must be explainable.
+8. Context packages are immutable.
+9. Retrieval must be deterministic for identical inputs.
+10. Compression must preserve semantic meaning.
+
+---
+
+## Architect's Notes (Normative)
+
+### 1. Use Tree-sitter Queries, Not Just AST Traversal
+
+Don't simply parse files.
+
+Create reusable Tree-sitter queries for:
+
+* Function definitions
+* Class definitions
+* Imports
+* Exports
+* Decorators/annotations
+* Test functions
+* Routes/endpoints
+
+This makes indexing language-independent and significantly faster.
+
+---
+
+### 2. Build a Symbol Graph, Not Just a Symbol Table
+
+Instead of storing:
+
+```text
+login() → auth.py
+```
+
+Store:
+
+```text
+login()
+├── calls validate_user()
+├── called by api/login
+├── uses jwt.encode()
+├── reads User model
+└── tested by test_auth.py
+```
+
+This graph becomes the backbone of retrieval.
+
+---
+
+### 3. Code Regions, Not Files
+
+One improvement over many existing coding agents:
+
+The smallest retrievable unit should be a **Code Region**, not a file.
+
+```text
+File
+│
+├── Region 1 (Imports)
+├── Region 2 (UserService)
+├── Region 3 (Helper Functions)
+└── Region 4 (CLI)
+```
+
+The Context Engine should retrieve only the relevant regions whenever possible.
+
+---
+
+### 4. Deterministic Retrieval
+
+Given:
+
+* same repository
+* same index
+* same task
+* same budget
+
+the Context Engine must return **the exact same context package**.
+
+Retrieval should not depend on model randomness.
+
+---
+
+### 5. Retrieval Before Reasoning
+
+This is the most important rule in AI Loom.
+
+**The planner and workers should never ask an LLM "where is the login code?"**
+
+That answer should come entirely from the Context Engine.
+
+LLMs are for reasoning.
+
+The Context Engine is for knowledge retrieval.
+
+---
