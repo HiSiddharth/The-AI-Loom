@@ -1,7 +1,9 @@
 import os
 
 ## Task
-OBJECTIVE =  "Make a script 'A.py' to print fibonacci series, and then another script 'B.py' to create a new file and copy contents of script A.py onto a new file named randomly from the output of the script A on running it first time."
+OBJECTIVE =  ("Make a script 'A.py' to print fibonacci series, and then another script 'B.py' "
+        "to create a new file and copy contents of script A.py onto a new file named randomly "
+        "from the output of the script A on running it first time.")
 # Configuration Paths
 WORKSPACE = "./sandbox"
 PLAN_FILE = os.path.join(WORKSPACE, "execution_plan.json")

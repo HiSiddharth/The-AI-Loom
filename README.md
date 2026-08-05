@@ -1,4 +1,4 @@
-# AI Loom
+# AI Loom - ⚠️ This project is a work in progress
 
 > **A local-first, multi-model, agentic software engineering platform.**
 
