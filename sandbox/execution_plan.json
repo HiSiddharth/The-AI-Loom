@@ -1,0 +1,7 @@
+{
+  "files_to_create": [
+    "A.py",
+    "B.py"
+  ],
+  "instructions": "1. Create a Python script 'A.py' with the following content:\n\nimport random\n\ndef generate_random_fibonacci(n):\n    fib_sequence = [0, 1]\n    for i in range(2, n):\n        next_val = fib_sequence[i-1] + fib_sequence[i-2]\n        if next_val > 50:\n            return ' '.join(map(str, fib_sequence))\n        else:\n            fib_sequence.append(next_val)\n\nif __name__ == '__main__':\n    random_n = random.randint(10, 30)\n    print(generate_random_fibonacci(random_n))"
+}
