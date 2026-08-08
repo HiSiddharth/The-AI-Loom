@@ -1,4 +1,0 @@
-[
-  {"step": 1, "task_name": "Create A.py", "instructions": "Write a python script A.py that prints the fibonacci series."},
-  {"step": 2, "task_name": "Create B.py", "instructions": "Write a python script B.py that executes A.py and creates a new file with random name based on its output. Copy contents of A.py into this newly created file."}
-]

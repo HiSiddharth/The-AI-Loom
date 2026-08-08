@@ -1,179 +1,212 @@
 import os
-import subprocess
 import requests
 import json
+import logging
+from typing import TypedDict, List, Dict, Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
 
 from config import (
     WORKSPACE,
-    PLAN_FILE,
-    VERDICT_FILE,
+    LOG_FILE,
     LM_STUDIO_HOST,
     BASE_URL,
     PLANNER_MODEL_ID,
-    WORKER_MODEL_ID, 
+    WORKER_MODEL_ID,
+    PLANNER_SYSTEM_PROMPT,
+    WORKER_SYSTEM_PROMPT,
+    VERIFIER_SYSTEM_PROMPT,
     OBJECTIVE
 )
+
+# ---------------------------------------------------------
+# SETUP DUAL LOGGING (Console + Timewise Log File)
+# ---------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("MiniPlatform")
+
+# ---------------------------------------------------------
+# LANGGRAPH STATE DEFINITION
+# ---------------------------------------------------------
+class PlatformState(TypedDict):
+    objective: str
+    tasks: List[Dict[str, Any]]
+    current_task_index: int
+    generated_files: Dict[str, str]
+    verification_report: str
 
 # ---------------------------------------------------------
 # LM STUDIO HARDWARE MANAGEMENT HELPERS
 # ---------------------------------------------------------
 def unload_all_models():
-    print("\n[VRAM MANAGER] Clearing all models from memory...")
+    logger.info("[VRAM MANAGER] Clearing all models from memory...")
     try:
         res = requests.get(f"{LM_STUDIO_HOST}/api/v0/models")
         if res.status_code == 200:
             for m in res.json().get("data", []):
                 if instance_id := m.get("id"):
+                    logger.info(f"-> Unloading instance: {instance_id}")
                     requests.post(f"{LM_STUDIO_HOST}/api/v1/models/unload", json={"instance_id": instance_id})
-        print("[SUCCESS] VRAM completely cleared.")
+        logger.info("[SUCCESS] VRAM completely cleared.")
     except Exception as e:
-        print(f"[WARNING] Unload skipped: {e}")
+        logger.warning(f"Unload skipped/failed: {e}")
 
 def unload_model_by_identifier(model_identifier):
-    print(f"\n[VRAM MANAGER] Unloading model: {model_identifier}...")
+    logger.info(f"[VRAM MANAGER] Unloading model: {model_identifier}...")
     try:
         res = requests.get(f"{LM_STUDIO_HOST}/api/v0/models")
         if res.status_code == 200:
             for m in res.json().get("data", []):
                 if model_identifier in m.get("id", "") or model_identifier in m.get("identifier", ""):
                     requests.post(f"{LM_STUDIO_HOST}/api/v1/models/unload", json={"instance_id": m.get("id")})
+                    logger.info(f"[SUCCESS] Unloaded {model_identifier}")
                     return
         requests.post(f"{LM_STUDIO_HOST}/api/v1/models/unload", json={"model": model_identifier})
     except Exception as e:
-        print(f"[WARNING] Selective unload error: {e}")
+        logger.warning(f"Selective unload error: {e}")
 
 def load_model(model_identifier):
-    print(f"\n[VRAM MANAGER] Loading model into VRAM: {model_identifier}...")
+    logger.info(f"[VRAM MANAGER] Loading model into VRAM: {model_identifier}...")
     try:
         res = requests.post(f"{LM_STUDIO_HOST}/api/v1/models/load", json={"model": model_identifier, "flash_attention": True})
         if res.status_code == 200:
-            print(f"[SUCCESS] Loaded {model_identifier}")
+            logger.info(f"[SUCCESS] Loaded {model_identifier}")
         else:
-            print(f"[ERROR] Load failed: {res.text}")
+            logger.error(f"[ERROR] Load failed: {res.text}")
     except Exception as e:
-        print(f"[ERROR] Connection error: {e}")
+        logger.error(f"[ERROR] Connection error while loading {model_identifier}: {e}")
 
 # ---------------------------------------------------------
-# 1. PLANNER: Pure Architecture & Task Breakdown (No Implementation)
+# GRAPH NODES
 # ---------------------------------------------------------
-def run_planner(objective: str):
-    print("\n==============================================")
-    print("PHASE 1: PLANNER (Generating Sequential Task List)")
-    print("==============================================")
+def planner_node(state: PlatformState):
+    logger.info("=== [NODE: PLANNER] Loading Planner Model ===")
     load_model(PLANNER_MODEL_ID)
     
     planner_llm = ChatOpenAI(base_url=BASE_URL, api_key="lm-studio", model=PLANNER_MODEL_ID)
+    system_prompt = SystemMessage(content=PLANNER_SYSTEM_PROMPT)
     
-    system_prompt = SystemMessage(content=(
-        "You are a Lead AI Architect. Your job is purely to plan and break down the objective "
-        "into an ordered sequence of granular implementation tasks for a developer worker. "
-        "Do NOT write code implementations yourself. "
-        "Output ONLY a valid JSON array of tasks matching this structure:\n"
-        "[\n"
-        '  {"step": 1, "task_name": "Create A.py", "instructions": "Write a python script A.py that prints the fibonacci series."},\n'
-        '  {"step": 2, "task_name": "Create B.py", "instructions": "Write a python script B.py that executes A.py, captures its output, and creates a new file named after that output containing a copy of A.py."}\n'
-        "]"
-    ))
-    
-    response = planner_llm.invoke([system_prompt, HumanMessage(content=objective)])
+    logger.info(f"Planner processing objective: {state['objective']}")
+    response = planner_llm.invoke([system_prompt, HumanMessage(content=state["objective"])])
     plan_text = response.content.strip()
     
-    # Extract JSON block safely
     if "```json" in plan_text:
         plan_text = plan_text.split("```json")[1].split("```")[0].strip()
     elif "```" in plan_text:
         plan_text = plan_text.split("```")[1].split("```")[0].strip()
         
-    with open(PLAN_FILE, "w", encoding="utf-8") as f:
-        f.write(plan_text)
-        
-    print(f"[SUCCESS] Sequential plan saved to {PLAN_FILE}")
+    try:
+        tasks = json.loads(plan_text)
+    except json.JSONDecodeError:
+        logger.error("Failed to parse JSON plan from planner output. Raw text:\n" + plan_text)
+        tasks = []
+
+    logger.info(f"Planner successfully generated {len(tasks)} tasks.")
     unload_model_by_identifier(PLANNER_MODEL_ID)
-
-# ---------------------------------------------------------
-# 2. WORKER: Executes Tasks One-by-One Sequentially
-# ---------------------------------------------------------
-def run_worker_tasks():
-    print("\n==============================================")
-    print("PHASE 2: WORKER (Executing Tasks Sequentially)")
-    print("==============================================")
     
-    if not os.path.exists(PLAN_FILE):
-        raise FileNotFoundError("Execution plan not found!")
-        
-    with open(PLAN_FILE, "r", encoding="utf-8") as f:
-        tasks = json.load(f)
+    return {"tasks": tasks, "current_task_index": 0, "generated_files": {}}
 
-    # Load worker model once for the sequence
+def worker_node(state: PlatformState):
+    logger.info("=== [NODE: WORKER] Loading Worker Model ===")
     load_model(WORKER_MODEL_ID)
+    
     worker_llm = ChatOpenAI(base_url=BASE_URL, api_key="lm-studio", model=WORKER_MODEL_ID)
+    tasks = state["tasks"]
+    index = state["current_task_index"]
+    generated_files = dict(state["generated_files"])
     
-    for item in tasks:
-        step_num = item.get("step")
-        task_name = item.get("task_name")
-        instructions = item.get("instructions")
+    current_task = tasks[index]
+    logger.info(f"Executing Step {current_task.get('step')}: {current_task.get('task_name')}")
+    
+    system_prompt = SystemMessage(content=WORKER_SYSTEM_PROMPT)
+    response = worker_llm.invoke([system_prompt, HumanMessage(content=current_task["instructions"])])
+    code_output = response.content.strip()
+    
+    if "```python" in code_output:
+        code_output = code_output.split("```python")[1].split("```")[0].strip()
+    elif "```" in code_output:
+        code_output = code_output.split("```")[1].split("```")[0].strip()
         
-        print(f"\n--- Running Step {step_num}: {task_name} ---")
+    filename = current_task.get("filename", f"script_{index}.py")
+    filepath = os.path.join(WORKSPACE, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(code_output)
         
-        system_prompt = SystemMessage(content=(
-            "You are an expert execution Software Engineer. Read the specific task instructions provided, "
-            "and write the requested complete, functional Python code file. "
-            "Output ONLY raw Python code inside a markdown block. Do not include extraneous text."
-        ))
-        
-        response = worker_llm.invoke([system_prompt, HumanMessage(content=instructions)])
-        code_output = response.content.strip()
-        
-        # Clean markdown code block
-        if "```python" in code_output:
-            code_output = code_output.split("```python")[1].split("```")[0].strip()
-        elif "```" in code_output:
-            code_output = code_output.split("```")[1].split("```")[0].strip()
-            
-        # Determine filename dynamically based on task info or fallback
-        filename = "A.py" if "A.py" in task_name or "A.py" in instructions else "B.py"
-        if "B.py" in task_name or "B.py" in instructions:
-            filename = "B.py"
-            
-        filepath = os.path.join(WORKSPACE, filename)
-        with open(filepath, "w", encoding="utf-8") as code_file:
-            code_file.write(code_output)
-            
-        print(f"[SUCCESS] Task {step_num} completed. Saved to {filepath}")
-
+    logger.info(f"Worker saved code to {filepath}")
+    generated_files[filename] = code_output
+    
     unload_model_by_identifier(WORKER_MODEL_ID)
-
-# ---------------------------------------------------------
-# 3. VERIFIER / TEST RUNNER
-# ---------------------------------------------------------
-def run_verifier():
-    print("\n==============================================")
-    print("PHASE 3: SANDBOX EXECUTION & TESTING")
-    print("==============================================")
     
-    target_script = os.path.join(WORKSPACE, "B.py")
-    if os.path.exists(target_script):
-        print(f"[RUNNING] Executing B.py in sandbox...")
-        try:
-            result = subprocess.run(["python", target_script], cwd=WORKSPACE, capture_output=True, text=True, timeout=5)
-            print(f"STDOUT:\n{result.stdout}")
-            if result.stderr:
-                print(f"STDERR:\n{result.stderr}")
-            else:
-                print("[SUCCESS] Script executed successfully. Check your sandbox folder for the generated file!")
-        except Exception as e:
-            print(f"[ERROR] Execution failed: {e}")
-    else:
-        print("[ERROR] B.py not found in sandbox.")
+    return {
+        "generated_files": generated_files,
+        "current_task_index": index + 1
+    }
 
+def worker_router(state: PlatformState):
+    if state["current_task_index"] < len(state["tasks"]):
+        return "worker"
+    return "verifier"
+
+def verifier_node(state: PlatformState):
+    logger.info("=== [NODE: VERIFIER] Reloading Planner Model for Code Review ===")
+    load_model(PLANNER_MODEL_ID)
+    
+    verifier_llm = ChatOpenAI(base_url=BASE_URL, api_key="lm-studio", model=PLANNER_MODEL_ID)
+    code_summary = "\n\n".join([f"--- FILE: {name} ---\n{code}" for name, code in state["generated_files"].items()])
+    
+    system_prompt = SystemMessage(content=VERIFIER_SYSTEM_PROMPT)
+    response = verifier_llm.invoke([system_prompt, HumanMessage(content=code_summary)])
+    verdict = response.content.strip()
+    
+    logger.info(f"Verification complete. Verdict:\n{verdict[:300]}...")
+    unload_model_by_identifier(PLANNER_MODEL_ID)
+    
+    return {"verification_report": verdict}
+
+# ---------------------------------------------------------
+# BUILD LANGGRAPH WORKFLOW
+# ---------------------------------------------------------
+workflow = StateGraph(PlatformState)
+
+workflow.add_node("planner", planner_node)
+workflow.add_node("worker", worker_node)
+workflow.add_node("verifier", verifier_node)
+
+workflow.add_edge(START, "planner")
+workflow.add_edge("planner", "worker")
+workflow.add_conditional_edges("worker", worker_router, {"worker": "worker", "verifier": "verifier"})
+workflow.add_edge("verifier", END)
+
+app = workflow.compile()
+
+# ---------------------------------------------------------
+# EXECUTION ENTRYPOINT
+# ---------------------------------------------------------
 if __name__ == "__main__":
     objective = OBJECTIVE
     
+    logger.info("=== INITIALIZING PIPELINE ===")
     unload_all_models()
-    run_planner(objective)
-    run_worker_tasks()
-    run_verifier()
     
-    print("\n[PIPELINE COMPLETE]")
+    initial_state = {
+        "objective": objective,
+        "tasks": [],
+        "current_task_index": 0,
+        "generated_files": {},
+        "verification_report": ""
+    }
+    
+    for event in app.stream(initial_state):
+        for node_name, state_update in event.items():
+            logger.info(f"Finished execution node -> [{node_name.upper()}]")
+            
+    logger.info("=== PIPELINE EXECUTION COMPLETE ===")
+    print(f"\n[INFO] All execution logs saved timewise to {LOG_FILE}")
