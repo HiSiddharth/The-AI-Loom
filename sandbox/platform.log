@@ -1,0 +1,57 @@
+[2026-08-10 00:16:36,799] [INFO] === INITIALIZING AI-LOOM PLATFORM ===
+[2026-08-10 00:16:36,799] [INFO] [VRAM MANAGER] Clearing all models from memory...
+[2026-08-10 00:16:36,803] [INFO] -> Unloading instance: qwen/qwen3-4b-thinking-2507
+[2026-08-10 00:16:37,282] [INFO] -> Unloading instance: mn-violet-lotus-12b
+[2026-08-10 00:16:37,285] [INFO] -> Unloading instance: google/gemma-4-26b-a4b-qat
+[2026-08-10 00:16:37,297] [INFO] -> Unloading instance: qwen/qwen3.5-9b
+[2026-08-10 00:16:37,300] [INFO] -> Unloading instance: text-embedding-nomic-embed-text-v1.5
+[2026-08-10 00:16:37,302] [INFO] [SUCCESS] VRAM completely cleared.
+[2026-08-10 00:16:37,310] [INFO] === [NODE: PLANNER] Loading Planner Model ===
+[2026-08-10 00:16:37,310] [INFO] [VRAM MANAGER] Loading model into VRAM: qwen/qwen3.5-9b...
+[2026-08-10 00:16:40,736] [INFO] [SUCCESS] Loaded qwen/qwen3.5-9b
+[2026-08-10 00:22:28,208] [INFO] HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-08-10 00:22:28,214] [INFO] Planner generated 2 tasks.
+[2026-08-10 00:22:28,215] [INFO] [VRAM MANAGER] Unloading model: qwen/qwen3.5-9b...
+[2026-08-10 00:22:28,519] [INFO] [SUCCESS] Unloaded qwen/qwen3.5-9b
+[2026-08-10 00:22:28,519] [INFO] [VRAM MANAGER] Loading model into VRAM: qwen/qwen3-4b-thinking-2507...
+[2026-08-10 00:22:30,296] [INFO] [SUCCESS] Loaded qwen/qwen3-4b-thinking-2507
+[2026-08-10 00:22:30,297] [INFO] Finished execution node -> [PLANNER]
+[2026-08-10 00:22:30,298] [INFO] === [NODE: WORKER] Executing Task with Self-Execution & Correction ===
+[2026-08-10 00:22:30,298] [INFO] Executing Step 1: Create Fibonacci Series Script
+[2026-08-10 00:22:52,437] [INFO] HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-08-10 00:22:52,439] [INFO] Worker testing execution of A.py (Attempt 1)...
+[2026-08-10 00:22:52,450] [INFO] Worker self-execution succeeded! Output:
+0
+1
+1
+2
+3
+5
+8
+13
+21
+34
+[2026-08-10 00:22:52,450] [INFO] Worker finalized and saved code to ./sandbox/A.py
+[2026-08-10 00:22:52,451] [INFO] Finished execution node -> [WORKER]
+[2026-08-10 00:22:52,451] [INFO] === [NODE: WORKER] Executing Task with Self-Execution & Correction ===
+[2026-08-10 00:22:52,451] [INFO] Executing Step 2: Create Automation Script
+[2026-08-10 00:24:49,544] [INFO] HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-08-10 00:24:49,546] [INFO] Worker testing execution of B.py (Attempt 1)...
+[2026-08-10 00:24:49,589] [INFO] Worker self-execution succeeded! Output:
+
+[2026-08-10 00:24:49,589] [INFO] Worker finalized and saved code to ./sandbox/B.py
+[2026-08-10 00:24:49,590] [INFO] [VRAM MANAGER] Unloading model: qwen/qwen3-4b-thinking-2507...
+[2026-08-10 00:24:49,820] [INFO] [SUCCESS] Unloaded qwen/qwen3-4b-thinking-2507
+[2026-08-10 00:24:49,820] [INFO] Finished execution node -> [WORKER]
+[2026-08-10 00:24:49,821] [INFO] === [NODE: MANAGER VERIFIER] Loading Planner Model for Review ===
+[2026-08-10 00:24:49,821] [INFO] [VRAM MANAGER] Loading model into VRAM: qwen/qwen3.5-9b...
+[2026-08-10 00:24:53,481] [INFO] [SUCCESS] Loaded qwen/qwen3.5-9b
+[2026-08-10 00:31:20,105] [INFO] HTTP Request: POST http://localhost:1234/v1/chat/completions "HTTP/1.1 200 OK"
+[2026-08-10 00:31:20,106] [INFO] Manager Review Verdict:
+
+[2026-08-10 00:31:20,106] [INFO] [VRAM MANAGER] Unloading model: qwen/qwen3.5-9b...
+[2026-08-10 00:31:20,467] [INFO] [SUCCESS] Unloaded qwen/qwen3.5-9b
+[2026-08-10 00:31:20,468] [INFO] Finished execution node -> [VERIFIER]
+[2026-08-10 00:31:20,468] [INFO] === [NODE: PLANNER] Loading Planner Model ===
+[2026-08-10 00:31:20,468] [INFO] [VRAM MANAGER] Loading model into VRAM: qwen/qwen3.5-9b...
+[2026-08-10 00:31:23,858] [INFO] [SUCCESS] Loaded qwen/qwen3.5-9b
