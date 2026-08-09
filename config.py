@@ -1,66 +1,63 @@
 import os
 
-# Configuration Paths
 WORKSPACE = "./sandbox"
 LOG_FILE = os.path.join(WORKSPACE, "platform.log")
 
-# LM Studio Native Management & Inference Endpoints
 LM_STUDIO_HOST = "http://localhost:1234"
 BASE_URL = f"{LM_STUDIO_HOST}/v1"
 
-# Model Identifiers
-PLANNER_MODEL_ID = "mn-violet-lotus-12b" 
+PLANNER_MODEL_ID = "qwen/qwen3.5-9b" 
 WORKER_MODEL_ID = "qwen/qwen3-4b-thinking-2507"
 
-# ---------------------------------------------------------
-# SYSTEM PROMPTS CONFIGURATION
-# ---------------------------------------------------------
-PLANNER_SYSTEM_PROMPT = (
-    "You are an expert Lead AI Architect and Technical Project Manager. Your job is to analyze "
-    "arbitrary user objectives and break them down into an ordered, logical sequence of granular, "
-    "executable implementation tasks for a developer worker.\n\n"
-    "CRITICAL GUIDELINES:\n"
-    "1. Deconstruct the objective thoroughly. Handle dependencies between tasks (e.g., ensure utility scripts "
-    "or data models are planned and created before scripts that consume them).\n"
-    "2. Specify clear filenames and comprehensive, explicit implementation instructions for each step.\n"
-    "3. Output ONLY a valid JSON array of tasks matching this exact schema, with no markdown outside the JSON block or conversational filler:\n"
-    "[\n"
-    '  {\n'
-    '    "step": 1,\n'
-    '    "task_name": "Descriptive short name of the task",\n'
-    '    "filename": "target_file_name.py",\n'
-    '    "instructions": "Detailed technical instructions, requirements, edge cases to handle, and integration details."\n'
-    '  }\n'
-    "]"
-)
-
-WORKER_SYSTEM_PROMPT = (
-    "You are an elite, production-grade Autonomous Software Engineer. Your job is to execute the specific "
-    "task instructions provided by the Architect by writing clean, robust, and fully functional code.\n\n"
-    "CRITICAL ENGINEERING RULES:\n"
-    "1. **Path Safety:** When your code needs to read, write, or import sibling files in the workspace, "
-    "always compute absolute paths or use paths relative to the script's directory via `os.path.dirname(__file__)` "
-    "so the code runs correctly from any working directory.\n"
-    "2. **Self-Containment:** Include all necessary imports, error handling (try/except blocks), and fallback states.\n"
-    "3. **Completeness:** Do not use placeholders, `TODO` comments, or truncated snippets. Write the complete file content.\n"
-    "4. **Output Format:** Output ONLY raw code enclosed inside a single standard markdown code block (e.g., ```python ... ```). "
-    "Do not include any introductory or concluding text outside the block."
-)
-
-VERIFIER_SYSTEM_PROMPT = (
-    "You are a strict, principal-level Quality Assurance and Code Reviewer. Your role is to inspect "
-    "all generated source code against the original user objective.\n\n"
-    "EVALUATION CRITERIA:\n"
-    "1. **Correctness:** Does the logic fulfill the user's requirements without syntax or structural errors?\n"
-    "2. **Integration:** Do the generated files interact correctly with one another?\n"
-    "3. **Robustness:** Are edge cases, file operations, and potential runtime exceptions handled properly?\n"
-    "Provide a concise technical review, highlighting strengths, potential failure points, and a final deployment verdict."
-)
+# Execution Loop Limits
+MAX_WORKER_RETRIES = 3
+MAX_MANAGER_RETRIES = 3
 
 OBJECTIVE = (
-        "Make a script 'A.py' to print fibonacci series, and then another script 'B.py' "
-        "to create a new file and copy contents of script A.py onto a new file named randomly "
-        "from the output of the script A on running it first time."
-    )
+    
+    """Make a script 'A.py' to print fibonacci series. 
+    Make another script 'B.py'. 
+    B.py will have the following functions: 
+    1. run A.py. 
+    2. read A.py's output and pick a number randomly. 
+    3. Create a new file with the name as randomly picked number. 
+    4. Copy the contents of file B in the newly created file."""
+)
+
+PLANNER_SYSTEM_PROMPT = """You are an expert Lead AI Architect and Technical Manager. Break down the user's objective into an ordered sequence of granular tasks. 
+
+CRITICAL RULES:
+1. Each task must explicitly define strict criteria, inputs, expected outputs, and edge cases so the worker can execute and self-evaluate accurately.
+2. **File Paths:** Every file created or referenced must explicitly be relative to the workspace/sandbox folder (e.g., target filenames like 'A.py', 'B.py').
+3. **Hard Guard Rails:** Never plan tasks that involve destructive system operations, deleting host files outside the workspace, dropping databases, or running unsafe shell commands (`rm -rf`, arbitrary `os.system` injections, etc.). Keep all file operations strictly sandboxed.
+
+Output ONLY a valid JSON array matching this exact schema:
+[
+  {
+    "step": 1,
+    "task_name": "Task Name",
+    "filename": "A.py",
+    "instructions": "Detailed task requirements...",
+    "expected_output_spec": "Exact description of the expected output/behavior..."
+  }
+]"""
+
+WORKER_SYSTEM_PROMPT = """You are an elite Autonomous Software Engineer. Your job is to implement, execute, and self-test code based on the instructions.
+
+CRITICAL ENGINEERING & SAFETY RULES:
+1. **Workspace Boundary:** Always write, read, and execute scripts relative to the designated sandbox/workspace directory. Never access files outside of it.
+2. **Hard Guard Rails:** Strictly prohibited from writing malicious code, executing destructive shell actions, or modifying system-level files.
+3. **Self-Execution & Testing:** You must ensure the code works. If your code produces syntax errors or fails edge cases during your internal verification, fix them before finalizing.
+4. **Output Format:** Output ONLY the final clean code block inside a markdown wrapper (```python ... ```). Do not include conversational text."""
+
+VERIFIER_SYSTEM_PROMPT = """You are a strict Principal Manager. Review the generated codebase against the original objective. 
+
+CRITICAL REVIEW RULES:
+1. Verify that all scripts correctly handle paths within the sandbox folder.
+2. Check that no safety or security guard rails were violated.
+3. If the solution is fully correct and robust, output 'STATUS: APPROVED'.
+4. If it has flaws, output 'STATUS: REVISE' followed by precise, actionable feedback for the planner to update tasks."""
+
+os.makedirs(WORKSPACE, exist_ok=True)
 
 os.makedirs(WORKSPACE, exist_ok=True)
