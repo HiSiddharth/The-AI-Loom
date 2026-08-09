@@ -1,0 +1,33 @@
+import os
+import subprocess
+import random
+import string
+
+current_dir = os.path.dirname(__file__)
+a_py_path = os.path.join(current_dir, 'A.py')
+
+try:
+    result = subprocess.run(
+        ['python', a_py_path],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    output = result.stdout.strip()
+except FileNotFoundError:
+    output = ""
+except subprocess.CalledProcessError as e:
+    print(f"Error executing A.py: {e}")
+    output = ""
+except Exception as e:
+    print(f"Unexpected error: {e}")
+    output = ""
+
+if not output:
+    output = "random_output"
+
+base_name = output[:8]
+random_suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+random_filename = f"{base_name}{random_suffix}.txt"
+
+print(random_filename)

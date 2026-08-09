@@ -87,6 +87,9 @@ def load_model(model_identifier):
 # ---------------------------------------------------------
 # GRAPH NODES
 # ---------------------------------------------------------
+# ---------------------------------------------------------
+# OPTIMIZED GRAPH NODES (No redundant Worker reloads)
+# ---------------------------------------------------------
 def planner_node(state: PlatformState):
     logger.info("=== [NODE: PLANNER] Loading Planner Model ===")
     load_model(PLANNER_MODEL_ID)
@@ -94,7 +97,6 @@ def planner_node(state: PlatformState):
     planner_llm = ChatOpenAI(base_url=BASE_URL, api_key="lm-studio", model=PLANNER_MODEL_ID)
     system_prompt = SystemMessage(content=PLANNER_SYSTEM_PROMPT)
     
-    logger.info(f"Planner processing objective: {state['objective']}")
     response = planner_llm.invoke([system_prompt, HumanMessage(content=state["objective"])])
     plan_text = response.content.strip()
     
@@ -106,17 +108,21 @@ def planner_node(state: PlatformState):
     try:
         tasks = json.loads(plan_text)
     except json.JSONDecodeError:
-        logger.error("Failed to parse JSON plan from planner output. Raw text:\n" + plan_text)
+        logger.error("Failed to parse JSON plan from planner output.")
         tasks = []
 
-    logger.info(f"Planner successfully generated {len(tasks)} tasks.")
+    logger.info(f"Planner generated {len(tasks)} tasks.")
     unload_model_by_identifier(PLANNER_MODEL_ID)
+    
+    # Pre-load the worker model *once* right after planner unloads, 
+    # so it stays hot for all sequential worker tasks!
+    load_model(WORKER_MODEL_ID)
     
     return {"tasks": tasks, "current_task_index": 0, "generated_files": {}}
 
 def worker_node(state: PlatformState):
-    logger.info("=== [NODE: WORKER] Loading Worker Model ===")
-    load_model(WORKER_MODEL_ID)
+    # NOTICE: No load_model() or unload_model() here! It stays hot in VRAM.
+    logger.info("=== [NODE: WORKER] Executing Task (Worker stays loaded) ===")
     
     worker_llm = ChatOpenAI(base_url=BASE_URL, api_key="lm-studio", model=WORKER_MODEL_ID)
     tasks = state["tasks"]
@@ -125,7 +131,8 @@ def worker_node(state: PlatformState):
     
     current_task = tasks[index]
     logger.info(f"Executing Step {current_task.get('step')}: {current_task.get('task_name')}")
-    
+            # Fresh context isolation: We only supply the System Prompt and THIS task's instructions.
+    # The model has zero memory of previous tasks, achieving a clean slate instantly.
     system_prompt = SystemMessage(content=WORKER_SYSTEM_PROMPT)
     response = worker_llm.invoke([system_prompt, HumanMessage(content=current_task["instructions"])])
     code_output = response.content.strip()
@@ -143,8 +150,6 @@ def worker_node(state: PlatformState):
     logger.info(f"Worker saved code to {filepath}")
     generated_files[filename] = code_output
     
-    unload_model_by_identifier(WORKER_MODEL_ID)
-    
     return {
         "generated_files": generated_files,
         "current_task_index": index + 1
@@ -153,6 +158,9 @@ def worker_node(state: PlatformState):
 def worker_router(state: PlatformState):
     if state["current_task_index"] < len(state["tasks"]):
         return "worker"
+    
+    # All tasks are done! Now we safely unload the worker model before moving to verifier.
+    unload_model_by_identifier(WORKER_MODEL_ID)
     return "verifier"
 
 def verifier_node(state: PlatformState):
