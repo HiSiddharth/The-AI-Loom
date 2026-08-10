@@ -1,29 +1,40 @@
+#Custom
 opencode.json
+
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
+*.pyo
 .venv/
 venv/
+.streamlit/
 
 # Node
 node_modules/
 dist/
 
-# Environment
+# Environment & Config
 .env
 .env.*
 
-# IDE
+# IDE & Editor
 .vscode/
 .idea/
 
 # OS
 .DS_Store
 
-# Build
+# Build & Compilation
 build/
 bin/
 obj/
+src/Optimised/
 
 # Logs
 *.log
+
+# Workspace & Miscellaneous
+TestFiles/
+.continue/
+.devcontainer/
