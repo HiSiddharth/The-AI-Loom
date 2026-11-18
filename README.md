@@ -1,171 +1,118 @@
-# AI Loom - ⚠️ This project is a work in progress
 
-> **A local-first, multi-model, agentic software engineering platform.**
+# The AI Loom 
 
-AI Loom is an intelligent coding system designed to orchestrate planning, implementation, validation, repository understanding and memory using both local and remote Large Language Models (LLMs).
+> **A local-first, multi-model coding orchestrator with dynamic VRAM management and execution-driven self-correction.**
 
-Unlike traditional AI coding assistants, AI Loom separates **planning**, **implementation**, **context retrieval**, **validation**, and **tool execution** into independent components that cooperate through a well-defined architecture.
-
-The project is designed to be:
-
-* 🖥️ Local-first
-* 🧠 Multi-model
-* 🔌 Provider agnostic
-* 📚 Repository aware
-* 🛡️ Secure by default
-* ✅ Validation driven
-* ⚡ Extensible
-* 📦 Offline capable
+AI Loom is a LangGraph-based agentic workflow designed to run multi-model software engineering loops locally via **LM Studio**. Instead of relying on a single large model, it separates **Planning**, **Implementation**, and **Verification** across specialized local models—dynamically swapping them in and out of GPU VRAM to fit consumer hardware constraints.
 
 ---
 
-# Architecture Documentation
-
-The complete architecture specification is available in the `ArchitectureDoc/` directory.
-
-## Core Architecture
-
-| Chapter    | Document                                                        |
-| ---------- | --------------------------------------------------------------- |
-| Chapter 1  | [Introduction & Design Philosophy](ArchitectureDoc/Chapter1.md) |
-| Chapter 2  | [System Overview](ArchitectureDoc/Chapter2.md)                  |
-| Chapter 3  | [Planner Architecture](ArchitectureDoc/Chapter3.md)             |
-| Chapter 4  | [Worker Architecture](ArchitectureDoc/Chapter4.md)              |
-| Chapter 5  | [Model Routing System](ArchitectureDoc/Chapter5.md)             |
-| Chapter 6  | [Context Engine](ArchitectureDoc/Chapter6.md)                   |
-| Chapter 7  | [Repository Indexing](ArchitectureDoc/Chapter7.md)              |
-| Chapter 8  | [Memory System](ArchitectureDoc/Chapter8.md)                    |
-| Chapter 9  | [Tool Execution Engine](ArchitectureDoc/Chapter9.md)            |
-| Chapter 10 | [Permission & Security Model](ArchitectureDoc/Chapter10.md)     |
-
----
-
-## Infrastructure
-
-| Chapter    | Document                                                             |
-| ---------- | -------------------------------------------------------------------- |
-| Chapter 11 | [Event Bus & Observability](ArchitectureDoc/Chapter11.md)            |
-| Chapter 12 | [Provider Abstraction Layer](ArchitectureDoc/Chapter12.md)           |
-| Chapter 13 | [Data Storage & Persistence](ArchitectureDoc/Chapter13.md)           |
-| Chapter 14 | [Context Lifecycle & Token Management](ArchitectureDoc/Chapter14.md) |
-| Chapter 15 | [Plugin System & Extensibility](ArchitectureDoc/Chapter15.md)        |
-| Chapter 16 | [Deployment, Configuration & Runtime](ArchitectureDoc/Chapter16.md)  |
-
----
-
-## Reliability & Specifications
-
-| Chapter    | Document                                                                  |
-| ---------- | ------------------------------------------------------------------------- |
-| Chapter 17 | [Testing, Validation & Quality Assurance](ArchitectureDoc/Chapter17.md)   |
-| Chapter 18 | [AI Loom Protocol (ALP)](ArchitectureDoc/Chapter18.md)                    |
-| Chapter 19 | [Development Roadmap & Implementation Plan](ArchitectureDoc/Chapter19.md) |
-| Chapter 20 | [AI Loom v1.0 Technical Specification](ArchitectureDoc/Chapter20.md)      |
-
----
-
-## Appendices
-
-| Appendix   | Document                                                                         |
-| ---------- | -------------------------------------------------------------------------------- |
-| Appendix A | [Engineering Decisions & Recommended Technologies](ArchitectureDoc/AppendixA.md) |
-| Appendix B | [Repository Layout & File-by-File Specification](ArchitectureDoc/AppendixB.md)   |
-| Appendix C | [AI Loom MVP (v0.1) Implementation Blueprint](ArchitectureDoc/AppendixC.md)      |
-
----
-
-# Recommended Reading Order
-
-For readers new to AI Loom:
-
-1. [Chapter 1 – Introduction & Design Philosophy](ArchitectureDoc/Chapter1.md)
-2. [Chapter 2 – System Overview](ArchitectureDoc/Chapter2.md)
-3. [Chapter 3 – Planner Architecture](ArchitectureDoc/Chapter3.md)
-4. [Chapter 4 – Worker Architecture](ArchitectureDoc/Chapter4.md)
-5. [Chapter 6 – Context Engine](ArchitectureDoc/Chapter6.md)
-6. [Chapter 7 – Repository Indexing](ArchitectureDoc/Chapter7.md)
-7. [Chapter 9 – Tool Execution Engine](ArchitectureDoc/Chapter9.md)
-8. [Chapter 17 – Testing, Validation & Quality Assurance](ArchitectureDoc/Chapter17.md)
-9. [Chapter 20 – AI Loom v1.0 Technical Specification](ArchitectureDoc/Chapter20.md)
-10. [Appendix C – AI Loom MVP (v0.1) Implementation Blueprint](ArchitectureDoc/AppendixC.md)
-
----
-
-# High-Level Architecture
+## Architecture (Current Working Pipeline)
 
 ```text
-                     User
-                       │
-                       ▼
-               OpenCode / CLI
-                       │
-                       ▼
-                AI Loom Runtime
-                       │
-      ┌────────────────┼────────────────┐
-      ▼                ▼                ▼
-  Planner        Context Engine     Tool Engine
-      │                │
-      ▼                ▼
- Model Router   Repository Index
-      │                │
-      ▼                ▼
-   Worker       Project Memory
-      │
-      ▼
-  Validation
-      │
-      ▼
-    Response
+                       ┌──────────────────────┐
+                       │    User Objective    │
+                       │    (CLI / Config)    │
+                       └──────────┬───────────┘
+                                  ▼
+                       ┌──────────────────────┐
+                       │     Planner Node     │◄─────────────────────┐
+                       │   (Qwen 3.5 9B)      │                      │
+                       └──────────┬───────────┘                      │
+                                  │ [Unload 9B -> Load 4B]           │
+                                  ▼                                  │
+                     (Valid task plan generated?)                    │
+                        │                   │                        │
+                       Yes                 No                        │
+                        │                   ▼                        │
+                        │                  END                       │
+                        ▼                                            │
+         ┌─────────────────────────────┐                             │
+         │         Worker Node         │                             │
+         │   (Qwen 3 4B Thinking)      │                             │
+         │  ┌───────────────────────┐  │                             │
+         │  │ Generate -> Subprocess│  │                             │
+         │  │   Run -> Feed stderr  │  │                             │
+         │  │   back on failure     │  │                             │
+         │  └───────────────────────┘  │                             │
+         └──────────────┬──────────────┘                             │
+                        │ [All tasks done: Unload 4B -> Load 9B]     │
+                        ▼                                            │
+         ┌─────────────────────────────┐                             │
+         │        Verifier Node        │                             │
+         │       (Qwen 3.5 9B)         │                             │
+         │ Reviews code + run outputs  │                             │
+         └──────────────┬──────────────┘                             │
+                        │                                            │
+              ┌─────────┴─────────┐                                  │
+        STATUS: APPROVED    STATUS: REVISE                           │
+              │                   └──────────────────────────────────┘
+              ▼                     (Up to MAX_MANAGER_RETRIES)
+             END
 ```
 
 ---
 
-# Reference MVP Stack
+## Key Features Implemented
 
-| Component        | Technology             |
-| ---------------- | ---------------------- |
-| Planner Model    | Qwen 3.6 27B           |
-| Worker Model     | Qwen 3.5 9B            |
-| Provider         | LM Studio              |
-| Repository Index | Tree-sitter            |
-| Storage          | SQLite                 |
-| Runtime          | Python + asyncio       |
-| Validation       | Native project tooling |
-| User Interface   | OpenCode               |
+* **Dynamic VRAM Lifecycle Management (`hardware.py`):** Explicitly unloads the active model via LM Studio's REST API (`/api/v0/models`, `/api/v1/models/load`, `/api/v1/models/unload`) before loading the next stage's model, allowing multi-model orchestration on single-GPU setups.
+* **Stateful LangGraph Orchestration (`graph.py`, `nodes.py`):** Coordinates task decomposition, sequential code generation, bounded retries, and manager feedback loops.
+* **Execution-Grounded Self-Correction:** The Worker executes each generated script via `subprocess` inside `./sandbox` and feeds captured `stderr` / tracebacks and prior code back into subsequent attempts.
+* **Thinking-Model Output Sanitization:** Strips `<think>...</think>` reasoning traces before parsing JSON task plans, Python code blocks, or verification verdicts.
+* **Observability:** Streams node transitions, execution outputs, VRAM swap timings, and review verdicts to both stdout and `./sandbox/platform.log`.
 
 ---
 
-# Project Status
-
-* ✅ Complete Architecture Specification
-* ✅ Technical Specification
-* ✅ Repository Layout
-* ✅ MVP Blueprint
-* 🚧 Implementation in Progress
-
----
-
-# Repository Structure
+## Project Structure
 
 ```text
 .
-├── ArchitectureDoc/
-│   ├── Chapter1.md
-│   ├── ...
-│   ├── Chapter20.md
-│   ├── AppendixA.md
-│   ├── AppendixB.md
-│   ├── AppendixC.md
-│   └── index.md
-├── README.md
-└── (implementation)
+├── main.py              # CLI entrypoint, logging setup, and pipeline runner
+├── config.py            # Model IDs, retry limits, workspace path, and system prompts
+├── graph.py             # LangGraph StateGraph wiring and conditional edges
+├── nodes.py             # Planner, Worker, and Verifier nodes + routing logic
+├── hardware.py          # LM Studio API client for dynamic VRAM loading/unloading
+├── opencode.json        # OpenCode LM Studio provider configuration
+└── ArchitectureDoc/     # Long-term v1.0 design specifications & roadmap docs
 ```
 
 ---
 
-# Vision
+## Quick Start
 
-AI Loom is not intended to be another AI chatbot with coding tools.
+### Prerequisites
+* Python 3.10+
+* [LM Studio](https://lmstudio.ai/) running locally on `http://localhost:1234` with the server enabled
+* Models downloaded in LM Studio (configured in `config.py`):
+  * Planner / Verifier: `qwen/qwen3.5-9b`
+  * Worker: `qwen/qwen3-4b-thinking-2507`
 
-Its goal is to become a **software engineering platform** that combines specialised planning, repository understanding, implementation, validation, memory and orchestration into a cohesive, extensible system capable of tackling real-world software engineering tasks.
+### Installation & Run
+```bash
+pip install langgraph langchain-openai langchain-core requests
+
+# Run with a custom objective via CLI
+python main.py --objective "Create calculator.py with add/divide functions and test_calculator.py using pytest, ensuring division by zero raises ValueError."
+
+# Or run using the default objective in config.py
+python main.py
+```
+
+Generated scripts and `platform.log` are written to `./sandbox/`.
+
+---
+
+## Current Limitations & Security Notice
+
+* **Directory-Scoped Execution (Not OS Isolation):** Generated scripts are currently executed with `cwd="./sandbox"` via Python's `subprocess`, which is **not** a hardened OS or container sandbox. Do not run untrusted objectives on sensitive host machines until container isolation is implemented.
+* **Single-File Step Execution:** Currently validates scripts individually via `python <filename>`. Automated `pytest` suite detection is planned next.
+
+---
+
+## Roadmap (Towards v1.0)
+
+The full long-term architectural vision is documented in [`ArchitectureDoc/`](ArchitectureDoc/Chapter1.md). Planned milestones include:
+- [ ] Ephemeral Docker container execution (`--network none`) for true sandboxing
+- [ ] `pytest` / linter integration inside the Worker validation step
+- [ ] Tree-sitter repository indexing & SQLite project memory
+- [ ] Async provider abstraction & OpenCode CLI integration

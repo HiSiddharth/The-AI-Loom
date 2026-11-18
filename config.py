@@ -59,5 +59,3 @@ CRITICAL REVIEW RULES:
 4. If it has flaws, output 'STATUS: REVISE' followed by precise, actionable feedback for the planner to update tasks."""
 
 os.makedirs(WORKSPACE, exist_ok=True)
-
-os.makedirs(WORKSPACE, exist_ok=True)
